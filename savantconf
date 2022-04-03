@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "$#" -ne 3 ]]; then
+  echo "Usage:   savantconf <left bind> <middle bind> <right bind>"
+  echo "Example: savantconf capslock leftshift leftctrl"
+  exit 1
+fi
+
+__left="${1:-}"
+__middle="${2:-}"
+__right="${3:-}"
+
+# Scancodes
+__code_common_1="700E0"
+__code_common_2="700E2"
+__code_left="70021"
+__code_middle="70022"
+__code_right="70023"
+# Vendor ID
+__vendor="05F3"
+# Product ID
+__product="030C"
+
+# Check that the evdev match is correct
+# shellcheck disable=2126
+__check=$( \
+  lsusb \
+  | grep -i "${__vendor}:${__product}" \
+  | wc -l
+)
+
+if [[ "${__check}" -ne "1" ]]; then
+  echo "ERROR: Configured vendor and product IDs do not match a USB device"
+  exit 1
+fi
+
+# Write the hwdb file for the pedals
+sudo tee "/etc/udev/hwdb.d/kinesis-savant.hwdb" > /dev/null <<EOF
+evdev:input:b0003v${__vendor}p${__product}*
+ KEYBOARD_KEY_${__code_common_1}=unknown
+ KEYBOARD_KEY_${__code_common_2}=unknown
+ KEYBOARD_KEY_${__code_left}=${__left}
+ KEYBOARD_KEY_${__code_middle}=${__middle}
+ KEYBOARD_KEY_${__code_right}=${__right}
+EOF
+
+# Update and reload the hwdb
+sudo udevadm hwdb --update
+sudo udevadm trigger
+
+# Rerun xmodmap
+[[ -s ~/.Xmodmap ]] && xmodmap ~/.Xmodmap
